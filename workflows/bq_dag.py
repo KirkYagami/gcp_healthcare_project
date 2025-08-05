@@ -3,28 +3,18 @@ from airflow import DAG
 from datetime import timedelta
 from airflow.utils.dates import days_ago
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
-
+import os
 
 PROJECT_ID = "active-district-466711-i0"
 LOCATION = "US"
 
-SQL_FILE_PATH_1 = 'data/BQ/bronze.sql'
-SQL_FILE_PATH_2 = 'data/BQ/silver.sql'
-SQL_FILE_PATH_3 = 'data/BQ/gold.sql'
-
 def read_sql_file(file_path):
     with open(file_path, "r") as file:
         return file.read()
-    
-BRONZE_QUERY = read_sql_file(SQL_FILE_PATH_1)
-SILVER_QUERY = read_sql_file(SQL_FILE_PATH_2)
-GOLD_QUERY = read_sql_file(SQL_FILE_PATH_3)
 
-
-# Define default arguments
 ARGS = {
     "owner": "Nikhil Sharma",
-    "start_date": None,
+    "start_date": days_ago(1),  # Set a valid start date
     "depends_on_past": False,
     "email_on_failure": False,
     "email_on_retry": False,
@@ -42,51 +32,41 @@ with DAG(
     tags=["gcs", "bq", "etl", "marvel"]
 ) as dag:
 
-    # Task to create bronze table
+    bronze_sql = read_sql_file("/home/airflow/gcs/data/BQ/bronze.sql")
+    silver_sql = read_sql_file("/home/airflow/gcs/data/BQ/silver.sql")
+    gold_sql = read_sql_file("/home/airflow/gcs/data/BQ/gold.sql")
+
     bronze_tables = BigQueryInsertJobOperator(
         task_id="bronze_tables",
         configuration={
             "query": {
-                "query": BRONZE_QUERY,
+                "query": bronze_sql,
                 "useLegacySql": False,
                 "priority": "BATCH",
             }
         },
     )
 
-    # Task to create silver table
     silver_tables = BigQueryInsertJobOperator(
         task_id="silver_tables",
         configuration={
             "query": {
-                "query": SILVER_QUERY,
+                "query": silver_sql,
                 "useLegacySql": False,
                 "priority": "BATCH",
             }
         },
     )
 
-
-    # Task to create gold table
     gold_tables = BigQueryInsertJobOperator(
         task_id="gold_tables",
         configuration={
             "query": {
-                "query": GOLD_QUERY,
+                "query": gold_sql,
                 "useLegacySql": False,
                 "priority": "BATCH",
             }
         },
     )
 
-
-# Define dependencies
-bronze_tables >> silver_tables >> gold_tables
-
-
-
-
-
-
-
-
+    bronze_tables >> silver_tables >> gold_tables
